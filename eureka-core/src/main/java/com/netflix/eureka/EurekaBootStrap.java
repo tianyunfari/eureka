@@ -126,7 +126,15 @@ public class EurekaBootStrap implements ServletContextListener {
      */
     protected void initEurekaEnvironment() throws Exception {
         logger.info("Setting the eureka configuration..");
-
+        // ConfigurationManager配置管理器，管理eureka自己所有的配置
+        // 重点：getConfigInstance里面使用的是volatile+synchronized+double check模式的单例模式
+        /**
+         * ConfigurationManager 创建过程：（继续往后跟读代码）
+         * 1、创建一个ConcurrentCompositeConfiguration实例，这个类代表了所谓的配置，包括eureka需要的所有配置。
+         * 2、往ConcurrentCompositeConfiguration加入一堆config，然后返回ConfigurationManager实例
+         * 3、初始化数据中心的配置，如果没有配置的话就是default data center
+         * 4、初始化eureka 运行的环境，如果没有配置的话，默认就是test环境
+         */
         String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
         if (dataCenter == null) {
             logger.info("Eureka data center value eureka.datacenter is not set, defaulting to default");
