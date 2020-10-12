@@ -163,8 +163,10 @@ public class EurekaBootStrap implements ServletContextListener {
         logger.info(eurekaServerConfig.getJsonCodecName());
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
+        // 2、初始化一个ApplicationInfoManager，和第3步创建eureka client相关，后续会讲解
         ApplicationInfoManager applicationInfoManager = null;
 
+        // 3、初始化一个eureka-server内部的一个eureka-client，用于来跟其他的eureka-server节点做注册和通信
         if (eurekaClient == null) {
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()

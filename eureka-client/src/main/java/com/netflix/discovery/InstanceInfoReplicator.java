@@ -22,7 +22,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * - a new update task is always scheduled automatically after an earlier update task. However if an on-demand task
  *   is started, the scheduled automatic update task is discarded (and a new one will be scheduled after the new
  *   on-demand update).
- *
+ * 用于将本地instanceinfo更新和复制到远程服务器的任务。此任务的属性是：
+ * 配置有单个更新线程以保证对远程服务器的顺序更新
+ * 可以通过onDemandUpdate（）按需调度更新任务
+ * 任务处理的速率受burstSize的限制
+ * 新更新总是在较早的更新任务之后自动计划任务。但是，如果启动了按需任务*，则计划的自动更新任务将被丢弃（并且将在新的按需更新之后安排新的任务）
  *   @author dliu
  */
 class InstanceInfoReplicator implements Runnable {
@@ -63,6 +67,7 @@ class InstanceInfoReplicator implements Runnable {
     public void start(int initialDelayMs) {
         if (started.compareAndSet(false, true)) {
             instanceInfo.setIsDirty();  // for initial register
+            // 这个scheduler是一个调度任务线程池，会将this线程放入到线程池中，然后再指定时间后执行该线程的run方法。
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
             scheduledPeriodicRef.set(next);
         }
