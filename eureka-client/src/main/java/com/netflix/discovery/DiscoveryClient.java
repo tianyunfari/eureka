@@ -952,6 +952,7 @@ public class DiscoveryClient implements EurekaClient {
                     && clientConfig.shouldRegisterWithEureka()
                     && clientConfig.shouldUnregisterOnShutdown()) {
                 applicationInfoManager.setInstanceStatus(InstanceStatus.DOWN);
+                // 取消注册服务实例
                 unregister();
             }
 
@@ -1018,10 +1019,13 @@ public class DiscoveryClient implements EurekaClient {
                 logger.info("Registered Applications size is zero : {}",
                         (applications.getRegisteredApplications().size() == 0));
                 logger.info("Application version is -1: {}", (applications.getVersion() == -1));
+                // 全量拉取服务实例数据
                 getAndStoreFullRegistry();
             } else {
+                // 增量拉取服务实例数据
                 getAndUpdateDelta(applications);
             }
+            // 重新计算和设置一致性hashcode
             applications.setAppsHashCode(applications.getReconcileHashCode());
             logTotalInstances();
         } catch (Throwable e) {
@@ -1034,10 +1038,10 @@ public class DiscoveryClient implements EurekaClient {
             }
         }
 
-        // Notify about cache refresh before updating the instance remote status
+        // Notify about cache refresh before updating the instance remote status 刷新本地缓存
         onCacheRefreshed();
 
-        // Update remote status based on refreshed data held in the cache
+        // Update remote status based on refreshed data held in the cache 更新远程服务实例运行状态
         updateInstanceRemoteStatus();
 
         // registry was fetched successfully, so return true
@@ -1139,6 +1143,7 @@ public class DiscoveryClient implements EurekaClient {
         long currentUpdateGeneration = fetchRegistryGeneration.get();
 
         Applications delta = null;
+        // 通过 eurekaTransport.queryClient 获取增量信息
         EurekaHttpResponse<Applications> httpResponse = eurekaTransport.queryClient.getDelta(remoteRegionsRef.get());
         if (httpResponse.getStatusCode() == Status.OK.getStatusCode()) {
             delta = httpResponse.getEntity();
@@ -1147,12 +1152,14 @@ public class DiscoveryClient implements EurekaClient {
         if (delta == null) {
             logger.warn("The server does not allow the delta revision to be applied because it is not safe. "
                     + "Hence got the full registry.");
+            // 如果增量信息为空，就直接发起一次全量更新
             getAndStoreFullRegistry();
         } else if (fetchRegistryGeneration.compareAndSet(currentUpdateGeneration, currentUpdateGeneration + 1)) {
             logger.debug("Got delta update with apps hashcode {}", delta.getAppsHashCode());
             String reconcileHashCode = "";
             if (fetchRegistryUpdateLock.tryLock()) {
                 try {
+                    // 用合并了增量数据之后的本地数据来生成一致性 hashcode
                     updateDelta(delta);
                     reconcileHashCode = getReconcileHashCode(applications);
                 } finally {
@@ -1163,6 +1170,7 @@ public class DiscoveryClient implements EurekaClient {
             }
             // There is a diff in number of instances for some reason
             if (!reconcileHashCode.equals(delta.getAppsHashCode()) || clientConfig.shouldLogDeltaDiff()) {
+                // 如果 hashcode 不一致，就触发远程调用进行全量更新
                 reconcileAndLogDifference(delta, reconcileHashCode);  // this makes a remoteCall
             }
         } else {
@@ -1543,7 +1551,7 @@ public class DiscoveryClient implements EurekaClient {
                     instanceRegionChecker.getAzToRegionMapper().refreshMapping();
                 }
             }
-
+            // 获取服务注册信息
             boolean success = fetchRegistry(remoteRegionsModified);
             if (success) {
                 registrySize = localRegionApps.get().size();

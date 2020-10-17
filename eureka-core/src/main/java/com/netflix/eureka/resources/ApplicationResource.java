@@ -56,6 +56,7 @@ public class ApplicationResource {
     private final String appName;
     private final EurekaServerConfig serverConfig;
     private final PeerAwareInstanceRegistry registry;
+    // eureka先缓存一份服务实例的信息
     private final ResponseCache responseCache;
 
     ApplicationResource(String appName,
@@ -83,6 +84,7 @@ public class ApplicationResource {
      *         application.
      */
     @GET
+    // 获取服务实例的详细信息
     public Response getApplication(@PathParam("version") String version,
                                    @HeaderParam("Accept") final String acceptHeader,
                                    @HeaderParam(EurekaAccept.HTTP_X_EUREKA_ACCEPT) String eurekaAccept) {
@@ -142,6 +144,7 @@ public class ApplicationResource {
      */
     @POST
     @Consumes({"application/json", "application/xml"})
+    // 注册服务实例
     public Response addInstance(InstanceInfo info,
                                 @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         logger.debug("Registering instance {} (replication={})", info.getId(), isReplication);

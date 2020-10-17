@@ -191,6 +191,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      *
      */
     private void scheduleRenewalThresholdUpdateTask() {
+        // getRenewalThresholdUpdateIntervalMs默认15分钟执行一次
         timer.schedule(new TimerTask() {
                            @Override
                            public void run() {
@@ -240,6 +241,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
         this.expectedNumberOfClientsSendingRenews = count;
+        // 获取每分钟应该获取心跳的实例数
         updateRenewsPerMinThreshold();
         logger.info("Got {} instances from neighboring DS node", count);
         logger.info("Renew threshold is: {}", numberOfRenewsPerMinThreshold);
@@ -255,6 +257,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
         logger.info("Changing status to UP");
         applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
+        // 此方法会做服务实例的自动摘除任务
         super.postInit();
     }
 
@@ -483,6 +486,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             // The self preservation mode is disabled, hence allowing the instances to expire.
             return true;
         }
+        // 这行代码触发自我保护机制，期望的一分钟要有多少次心跳发送过来，所有服务实例一分钟得发送多少次心跳
+        // getNumOfRenewsInLastMin 上一分钟所有服务实例一共发送过来多少心跳，10次
+        // 如果上一分钟 的心跳次数太少了（20次）< 我期望的100次，此时会返回false
         return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
     }
 
@@ -526,6 +532,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     private void updateRenewalThreshold() {
         try {
+            // count为注册表中服务实例的个数
+            // 将自己作为eureka client，从其他eureka server拉取注册表
+            // 合并到自己本地去 将从别的eureka server拉取到的服务实例的数量作为count
             Applications apps = eurekaClient.getApplications();
             int count = 0;
             for (Application app : apps.getRegisteredApplications()) {
@@ -558,6 +567,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     @Override
     public List<Application> getSortedApplications() {
+        // getApplications会调用getApplicationsFromMultipleRegions()方法获取注册的服务实例信息
         List<Application> apps = new ArrayList<Application>(getApplications().getRegisteredApplications());
         Collections.sort(apps, APP_COMPARATOR);
         return apps;
@@ -666,6 +676,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                     infoFromRegistry = getInstanceByAppAndId(appName, id, false);
                     node.heartbeat(appName, id, infoFromRegistry, overriddenStatus, false);
                     break;
+                    // 执行注册操作
                 case Register:
                     node.register(info);
                     break;

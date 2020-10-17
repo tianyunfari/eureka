@@ -101,6 +101,7 @@ class AcceptorExecutor<ID, T> {
         this.maxBatchingDelay = maxBatchingDelay;
         this.trafficShaper = new TrafficShaper(congestionRetryDelayMs, networkFailureRetryMs);
 
+        // 后台线程处理acceptorQueue队列中的数据
         ThreadGroup threadGroup = new ThreadGroup("eurekaTaskExecutors");
         this.acceptorThread = new Thread(threadGroup, new AcceptorRunner(), "TaskAcceptor-" + id);
         this.acceptorThread.setDaemon(true);
@@ -122,6 +123,7 @@ class AcceptorExecutor<ID, T> {
     }
 
     void process(ID id, T task, long expiryTime) {
+        // 将请求都放入到acceptorQueue中
         acceptorQueue.add(new TaskHolder<ID, T>(id, task, expiryTime));
         acceptedTasks++;
     }
@@ -219,6 +221,7 @@ class AcceptorExecutor<ID, T> {
 
         private void drainInputQueues() throws InterruptedException {
             do {
+                // 处理acceptorQueue队列中的数据
                 drainReprocessQueue();
                 drainAcceptorQueue();
 

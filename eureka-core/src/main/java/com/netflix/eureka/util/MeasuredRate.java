@@ -41,6 +41,7 @@ public class MeasuredRate {
      * @param sampleInterval in milliseconds
      */
     public MeasuredRate(long sampleInterval) {
+        // 在AbstractInstanceRegistry的构造方法中被调用，默认时间为一分钟。
         this.sampleInterval = sampleInterval;
         this.timer = new Timer("Eureka-MeasureRateTimer", true);
         this.isActive = false;
@@ -54,6 +55,8 @@ public class MeasuredRate {
                 public void run() {
                     try {
                         // Zero out the current bucket.
+                        // renewsLastMin 为1分钟
+                        // 每分钟调度一次，将当前的88次总心跳设置到lastBucket中去，然后将当前的currentBucket 设置为0 秒啊！
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
                         logger.error("Cannot reset the Measured Rate", e);
@@ -83,6 +86,7 @@ public class MeasuredRate {
      * Increments the count in the current sample interval.
      */
     public void increment() {
+        // 心跳次数+1 例如说1分钟所有服务实例共发起了88次心跳
         currentBucket.incrementAndGet();
     }
 }

@@ -191,8 +191,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @see com.netflix.eureka.lease.LeaseManager#register(java.lang.Object, int, boolean)
      */
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
+        // 这是一个读锁，方便多个实例同时来注册
         read.lock();
         try {
+            // 用一个concurrenthashmap来保存服务实例的注册对象
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
             REGISTER.increment(isReplication);
             if (gMap == null) {
@@ -261,6 +263,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             }
             registrant.setActionType(ActionType.ADDED);
             recentlyChangedQueue.add(new RecentlyChangedItem(lease));
+            // 更新服务最新更新时间
             registrant.setLastUpdatedTimestamp();
             invalidateCache(registrant.getAppName(), registrant.getVIPAddress(), registrant.getSecureVipAddress());
             logger.info("Registered instance {}/{} with status {} (replication={})",
@@ -298,11 +301,14 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         read.lock();
         try {
             CANCEL.increment(isReplication);
+            // 获取注册表信息
             Map<String, Lease<InstanceInfo>> gMap = registry.get(appName);
             Lease<InstanceInfo> leaseToCancel = null;
             if (gMap != null) {
+                // 通过实例id将注册信息从注册表中移除
                 leaseToCancel = gMap.remove(id);
             }
+            // 最近取消的注册表信息队列加入该实例信息
             recentCanceledQueue.add(new Pair<Long, String>(System.currentTimeMillis(), appName + "(" + id + ")"));
             InstanceStatus instanceStatus = overriddenInstanceStatusMap.remove(id);
             if (instanceStatus != null) {
@@ -313,17 +319,20 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 logger.warn("DS: Registry: cancel failed because Lease is not registered for: {}/{}", appName, id);
                 return false;
             } else {
+                // 执行下线操作的cancel方法
                 leaseToCancel.cancel();
                 InstanceInfo instanceInfo = leaseToCancel.getHolder();
                 String vip = null;
                 String svip = null;
                 if (instanceInfo != null) {
                     instanceInfo.setActionType(ActionType.DELETED);
+                    // 最近更新的队列中加入此服务实例信息
                     recentlyChangedQueue.add(new RecentlyChangedItem(leaseToCancel));
                     instanceInfo.setLastUpdatedTimestamp();
                     vip = instanceInfo.getVIPAddress();
                     svip = instanceInfo.getSecureVipAddress();
                 }
+                // 使注册表的读写缓存失效
                 invalidateCache(appName, vip, svip);
                 logger.info("Cancelled instance {}/{} (replication={})", appName, id, isReplication);
             }
@@ -586,6 +595,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
+        // 是否允许主动删除宕机节点数据，这里判断是否进入自我保护机制，如果是自我保护了则不允许摘除服务
+        // 期望的每分钟所有实例心跳次数x85%
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;
@@ -600,6 +611,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (leaseMap != null) {
                 for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
                     Lease<InstanceInfo> lease = leaseEntry.getValue();
+                    // 遍历服务实例心跳时间是否超过了对应的时间
+                    // 因为更新续约时间加上个duration默认为90秒是，所以实际的摘除时间为2*duration180s后
                     if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
                         expiredLeases.add(lease);
                     }
@@ -750,6 +763,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             Application app = null;
 
             if (entry.getValue() != null) {
+                // 将registry注册的服务实例信息放到apps
                 for (Entry<String, Lease<InstanceInfo>> stringLeaseEntry : entry.getValue().entrySet()) {
                     Lease<InstanceInfo> lease = stringLeaseEntry.getValue();
                     if (app == null) {
@@ -1185,6 +1199,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         responseCache.invalidate(appName, vipAddress, secureVipAddress);
     }
 
+    // 期望实例的每分钟所有实例心跳次数x85%
     protected void updateRenewsPerMinThreshold() {
         this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
                 * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
@@ -1214,6 +1229,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         if (evictionTaskRef.get() != null) {
             evictionTaskRef.get().cancel();
         }
+        // 定时感知服务实例下线的操作，默认60秒执行一次
         evictionTaskRef.set(new EvictionTask());
         evictionTimer.schedule(evictionTaskRef.get(),
                 serverConfig.getEvictionIntervalTimerInMs(),
@@ -1258,13 +1274,24 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
          * according to the configured cycle.
          */
         long getCompensationTimeMs() {
+            // 第一次进来先获取当前时间 currNanos=20:00:00
+            // 第二次过来，此时currNanos=20:01:00
+            // 第三次过来，currNanos=20:03:00才过来，本该60s调度一次的，由于fullGC或者其他原因，到了这个时间点没执行
             long currNanos = getCurrentTimeNano();
+            // 获取上一次这个EvictionTask执行的时间 getAndSet ：以原子方式设置为给定值，并返回以前的值
+            // 第一次 将20:00:00 设置到lastNanos，然后return 0
+            // 第二次过来后，拿到的lastNanos为20:00:00
+            // 第三次过来，拿到的lastNanos为20:01:00
             long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
             if (lastNanos == 0l) {
                 return 0l;
             }
 
+            // 第二次进来，计算elapsedMs = 60s
+            // 第三次进来，计算elapsedMs = 120s
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
+            // 第二次进来，配置的服务驱逐间隔默认时间为60s，计算的补偿时间compensationTime=0
+            // 第三次进来，配置的服务驱逐间隔默认时间为60s，计算的补偿时间compensationTime=60s
             long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
             return compensationTime <= 0l ? 0l : compensationTime;
         }

@@ -103,6 +103,7 @@ public class InstanceResource {
      *         failure.
      */
     @PUT
+    // 服务端服务续约的逻辑
     public Response renewLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
             @QueryParam("overriddenstatus") String overriddenStatus,
@@ -275,6 +276,7 @@ public class InstanceResource {
      *         failure.
      */
     @DELETE
+    // 服务实例下线
     public Response cancelLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         try {

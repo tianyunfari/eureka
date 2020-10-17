@@ -208,6 +208,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // registry的getSortedApplications()可用于获取服务的实例信息
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -222,7 +223,9 @@ public class EurekaBootStrap implements ServletContextListener {
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
+        // 获取其他EurekaServer中注册表数据
         int registryCount = registry.syncUp();
+        // 服务实例检测调度任务入口
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.

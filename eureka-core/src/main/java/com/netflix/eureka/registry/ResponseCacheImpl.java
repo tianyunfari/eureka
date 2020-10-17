@@ -127,6 +127,7 @@ public class ResponseCacheImpl implements ResponseCache {
         this.registry = registry;
 
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        // readWriteCacheMap用的是google的GuavaCache,基于内存，getResponseCacheAutoExpirationInSeconds过期时间默认为3分钟
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
@@ -147,6 +148,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
+                                // 获取服务实例信息写到readWriteCacheMap
                                 Value value = generatePayload(key);
                                 return value;
                             }
@@ -166,6 +168,7 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    // 更新readOnlyCacheMap缓存
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
             @Override
@@ -438,6 +441,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         }
                     } else {
                         tracer = serializeOneApptimer.start();
+                        // AbstractInstanceRegistry 中的 getApplications 方法获取应用信息并放到缓存中
                         payload = getPayLoad(key, registry.getApplication(key.getName()));
                     }
                     break;
